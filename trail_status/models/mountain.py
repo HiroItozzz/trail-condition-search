@@ -13,7 +13,10 @@ class AreaName(models.TextChoices):
 
 
 class MountainGroup(models.Model):
-    """ユーザー視点の山名（厳選）"""
+    """
+    ユーザー視点の山名
+    将来的なフロントエンド向けの検索用地図作成用
+    """
 
     name = models.CharField("山名", max_length=50, unique=True)  # 例: 雲取山、大岳山、御岳山
 

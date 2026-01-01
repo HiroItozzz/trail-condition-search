@@ -36,17 +36,30 @@ class MountainAliasAdmin(admin.ModelAdmin):
 
 @admin.register(TrailCondition)
 class TrailConditionAdmin(admin.ModelAdmin):
-    list_display = ["mountain_name_raw", "trail_name", "status", "reported_date", "is_active"]
-    list_filter = ["status", "is_active", "source"]
+    list_display = ["mountain_name_raw", "trail_name", "area", "status", "reported_at", "resolved_at", "disabled"]
+    list_filter = ["disabled", ("resolved_at", admin.EmptyFieldListFilter), "status", "area", "source"]
     search_fields = ["mountain_name_raw", "trail_name", "description"]
     date_hierarchy = "reported_at"
     readonly_fields = ["created_at", "updated_at"]
 
     fieldsets = (
-        ("情報源", {"fields": ("source",)}),
-        ("原文情報", {"fields": ("mountain_name_raw", "trail_name", "title", "description", "reported_at")}),
-        ("正規化済み情報", {"fields": ("mountain_group", "status")}),
-        ("状態管理", {"fields": ("is_active",)}),
+        ("情報源", {"fields": ("source", "url1")}),
+        (
+            "原文情報",
+            {
+                "fields": (
+                    "mountain_name_raw",
+                    "trail_name",
+                    "area",
+                    "title",
+                    "description",
+                    "reported_at",
+                    "resolved_at",
+                )
+            },
+        ),
+        ("正規化済み情報", {"fields": ("status", "mountain_group")}),
+        ("管理", {"fields": ("disabled",)}),
         ("メタデータ", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
 
