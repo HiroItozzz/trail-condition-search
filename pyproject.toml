@@ -17,7 +17,6 @@ dependencies = [
     "trafilatura>=2.0.0",
 ]
 
-
 [tool.ruff]
 line-length = 120
 target-version = "py313"
