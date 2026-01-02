@@ -20,8 +20,8 @@ class DataSource(models.Model):
         "機関種別", max_length=50, choices=OrganizationType.choices, default=OrganizationType.ASSOCIATION
     )
     prefecture_code = models.CharField("都道府県コード", max_length=2, default="13", blank=True)  # 東京
-    url1 = models.URLField("URL①")
-    url2 = models.URLField("URL②", blank=True)
+    url1 = models.URLField("URL①", max_length=500)
+    url2 = models.URLField("URL②", max_length=500, blank=True)
     data_format = models.CharField(
         "データ形式",
         max_length=50,
