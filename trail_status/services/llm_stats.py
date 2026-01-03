@@ -66,7 +66,7 @@ class TokenStats:
 
 
 class LlmStats:
-    """LLM実行全体のメトリクス管理クラス (委譲パターン)"""
+    """LLM実行後のメトリクス管理クラス (TokenStatsから委譲)"""
     
     def __init__(self, token_stats: TokenStats):
         self.token_stats = token_stats
@@ -87,57 +87,40 @@ class LlmStats:
         # self.confidence_score: float = None
         # self.model_version: str = None
     
-    # TokenStatsへの便利なアクセス (委譲)
+    # TokenStatsへの便利なアクセス (必要最小限)
     @property
     def total_fee(self) -> float:
         """総コスト"""
         return self.token_stats.total_fee
     
-    @property
-    def model(self) -> str:
-        """モデル名"""
-        return self.token_stats.model_name
-    
-    @property
-    def input_tokens(self) -> int:
-        """入力トークン数"""
-        return self.token_stats.input_tokens
-    
-    @property
-    def thoughts_tokens(self) -> int:
-        """思考トークン数"""
-        return self.token_stats.thoughts_tokens
-    
-    @property
-    def output_tokens(self) -> int:
-        """出力トークン数"""
-        return self.token_stats.pure_output_tokens
-    
     def to_dict(self) -> dict:
         """辞書形式で全メトリクスを取得"""
         result = self.token_stats.to_dict()
         
-        # LlmStats固有のメトリクス追加
-        if self.execution_time is not None:
-            result["execution_time"] = self.execution_time
-        if self.retry_count > 0:
-            result["retry_count"] = self.retry_count
-        if self.queue_time is not None:
-            result["queue_time"] = self.queue_time
-        if self.response_time is not None:
-            result["response_time"] = self.response_time
-            
-        # 品質メトリクス
+        # LlmStats固有のメトリクス追加（None値や0値の除外）
+        metrics = {
+            "execution_time": self.execution_time,
+            "retry_count": self.retry_count,
+            "queue_time": self.queue_time,
+            "response_time": self.response_time,
+            "validation_success": self.validation_success,
+            "extraction_count": self.extraction_count,
+            "error_count": self.error_count,
+        }
+        
+        # None値と意味のない0値を除外
+        for key, value in metrics.items():
+            if value is not None and (not isinstance(value, int) or value != 0 or key == "retry_count"):
+                if key != "validation_success" or value is not True:  # デフォルトのTrue以外を保持
+                    result[key] = value
+        
+        # validation_successは常に保持
         result["validation_success"] = self.validation_success
-        if self.extraction_count > 0:
-            result["extraction_count"] = self.extraction_count
-        if self.error_count > 0:
-            result["error_count"] = self.error_count
             
         return result
     
     def __repr__(self):
-        return f"LlmStats(model={self.model}, total_fee=${self.total_fee:.4f}, execution_time={self.execution_time}s)"
+        return f"LlmStats(model={self.token_stats.model_name}, total_fee=${self.total_fee:.4f}, execution_time={self.execution_time}s)"
 
 
 class BaseLlmFee(ABC):
