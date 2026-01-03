@@ -3,7 +3,6 @@ import logging
 
 import httpx
 
-from .content_hash import has_content_changed
 from .fetcher import DataFetcher
 from .llm_client import DeepseekClient, GeminiClient, LlmConfig
 from .llm_stats import LlmStats
@@ -44,7 +43,8 @@ class TrailConditionPipeline:
                 return {"error": "スクレイピング結果が空でした"}
 
             # 2. ハッシュベース変更検知
-            content_changed, new_hash = has_content_changed(scraped_html, source_data.get("content_hash"))
+            fetcher = DataFetcher()
+            content_changed, new_hash = fetcher.has_content_changed(scraped_html, source_data.get("content_hash"))
             
             if not content_changed:
                 logger.info(f"コンテンツ変更なし（ソースID: {source_data['id']}）- LLM処理をスキップ")
@@ -56,7 +56,7 @@ class TrailConditionPipeline:
                 }
 
             # 3. trafilaturaでテキスト抽出
-            scraped_text = await self._extract_text_content(scraped_html)
+            scraped_text = await self._extract_text_content(client, source_data["url1"])
             if not scraped_text.strip():
                 return {"error": "テキスト抽出結果が空でした"}
 
@@ -78,28 +78,19 @@ class TrailConditionPipeline:
 
     async def _fetch_raw_content(self, client: httpx.AsyncClient, url: str) -> str:
         """生HTMLのスクレイピング（ハッシュ計算用）"""
+        fetcher = DataFetcher()
         try:
-            response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ..."})
+            response = await client.get(url, headers=fetcher.headers)
             response.raise_for_status()
             return response.text
         except Exception as e:
             logger.error(f"HTMLスクレイピング失敗 - URL: {url}, エラー: {e}")
             raise
 
-    async def _extract_text_content(self, html: str) -> str:
-        """HTMLからテキストを抽出（AI解析用）"""
+    async def _extract_text_content(self, client: httpx.AsyncClient, url: str) -> str:
+        """テキスト抽出（AI解析用）- DataFetcherのリトライロジック活用"""
         fetcher = DataFetcher()
-        # DataFetcherのトラフィlatura抽出ロジックを再利用
-        import trafilatura
-        content = trafilatura.extract(
-            html,
-            include_tables=True,
-            include_links=True,
-        )
-        if content is None:
-            logger.warning("Trafilaturaがコンテンツの抽出に失敗しました。生のテキストを出力します。")
-            content = trafilatura.html2txt(html)
-        return content or ""
+        return await fetcher.fetch_text(client, url)
 
     async def _analyze_with_ai(
         self, source_data: ModelDataSingle, scraped_text: str, ai_model: str | None
