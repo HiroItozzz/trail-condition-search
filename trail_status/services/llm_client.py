@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from django.conf import settings
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, ValidationError, computed_field
 
 from .llm_stats import TokenStats
 from .schema import TrailConditionSchemaList
@@ -111,12 +111,23 @@ class ConversationalAi(ABC):
     async def generate(self) -> tuple[dict, TokenStats]:
         pass
 
+    # サーバーエラーとバリデーションエラー時のみリトライ
     async def handle_server_error(self, i, max_retries):
         if i < max_retries - 1:
-            logger.warning(f"deepseekの計算資源が逼迫しているようです。{5 * (i + 1)}秒後にリトライします。")
+            logger.warning(f"{self.model}の計算資源が逼迫しているようです。{5 * (i + 1)}秒後にリトライします。")
+            await asyncio.sleep(3 ** (i + 1))
+        else:
+            logger.warning(f"{self.model}は現在過負荷のようです。少し時間をおいて再実行する必要があります。")
+            logger.warning("実行を中止します。")
+            raise
+
+    async def validation_error(self, i, max_retries, response_text):
+        if i < max_retries - 1:
+            logger.warning(f"{self.model}が構造化出力に失敗。{5 * (i + 1)}秒後にリトライします。")
             await asyncio.sleep(5 * (i + 1))
         else:
-            logger.warning("deepseekは現在過負荷のようです。少し時間をおいて再実行する必要があります。")
+            logger.warning(f"{self.model}が{max_retries}回構造化出力に失敗。LLMの設定を見直してください。")
+            self.save_invalid_data(response_text)
             logger.warning("実行を中止します。")
             raise
 
@@ -132,7 +143,7 @@ class ConversationalAi(ABC):
         logger.info(f"詳細: {e}")
         raise
 
-    def check_response(self, response_text):
+    def validate_response(self, response_text):
         # デバッグ用：サンプル出力を保存
         sample_path = get_sample_dir() / f"{self.model}_sample.json"
         sample_path.write_text(response_text, encoding="utf-8")
@@ -140,19 +151,22 @@ class ConversationalAi(ABC):
         try:
             validated_data = TrailConditionSchemaList.model_validate_json(response_text)
             logger.warning(f"{self.model}が構造化出力に成功")
-        except Exception:
-            logger.error(f"{self.model}が構造化出力に失敗。")
-
-            # エラー時の出力保存
-            output_dir = settings.BASE_DIR / "outputs"
-            output_dir.mkdir(exist_ok=True)
-            error_file = output_dir / "__summary.txt"
-            error_file.write_text(response_text, encoding="utf-8")
-
-            logger.error(f"{error_file}へ出力を保存しました。")
-            raise
-
+        except ValidationError as e:
+            raise e
         return validated_data
+
+    def save_invalid_data(self, response_text):
+        # エラー時の出力保存
+        from datetime import datetime
+
+        output_dir = settings.BASE_DIR / "outputs"
+        output_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        error_file = output_dir / f"validation_error_{self.model}_{timestamp}.txt"
+        error_file.write_text(response_text, encoding="utf-8")
+
+        logger.error(f"{error_file}へ出力を保存しました。")
 
 
 class DeepseekClient(ConversationalAi):
@@ -177,7 +191,11 @@ class DeepseekClient(ConversationalAi):
                     response_format={"type": "json_object"},
                     stream=False,
                 )
+                generated_text = response.choices[0].message.content
+                validated_data = super().validate_response(generated_text)
                 break
+            except ValidationError:
+                await super().validation_error(i, max_retries, generated_text)
             except Exception as e:
                 # https://api-docs.deepseek.com/quick_start/error_codes
                 if any(code in str(e) for code in ["500", "502", "503"]):
@@ -200,10 +218,7 @@ class DeepseekClient(ConversationalAi):
                 else:
                     super().handle_unexpected_error(e)
 
-        generated_text = response.choices[0].message.content
-        validated_data = super().check_response(generated_text)
-
-        # 実際に出力されたテキストに基づく出力トークンを計算
+        # 純粋なoutput_tokensを計算
         thoughts_tokens = getattr(response.usage.completion_tokens_details, "reasoning_tokens", 0)
         output_tokens = response.usage.completion_tokens - thoughts_tokens
 
@@ -237,7 +252,6 @@ class GeminiClient(ConversationalAi):
 
         max_retries = 3
         for i in range(max_retries):
-            # generate_contentメソッドは内部的にHTTPレスポンスコード200以外の場合は例外を発生させる
             try:
                 response = await client.aio.models.generate_content(  # リクエスト
                     model=self.model,
@@ -249,16 +263,16 @@ class GeminiClient(ConversationalAi):
                         thinking_config=types.ThinkingConfig(thinking_budget=self.thinking_budget),
                     ),
                 )
-                print("Geminiによる要約を受け取りました。")
+                validated_data = super().validate_response(response.text)
                 break
+            except ValidationError:
+                await super().validation_error(i, max_retries, response.text)
             except ServerError:
                 await super().handle_server_error(i, max_retries)
             except ClientError as e:
                 super().handle_client_error(e)
             except Exception as e:
                 super().handle_unexpected_error(e)
-
-        validated_data = super().check_response(response.text)
 
         stats = TokenStats(
             response.usage_metadata.prompt_token_count,
