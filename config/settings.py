@@ -183,7 +183,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,  # 1ページあたり20件
     # デフォルトの認証（今は不要だが将来のため）
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",  # ← Browsable API用
+        "rest_framework.authentication.BasicAuthentication",  # ← APIクライアント用
+    ],
     # デフォルトの権限（誰でも読み取り可能）
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
