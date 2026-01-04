@@ -11,5 +11,5 @@ class ListView(generics.ListCreateAPIView):
 
 class DetailView(generics.RetrieveAPIView):
     queryset = TrailCondition.objects.all()
-    serializer_class = TrailCondition
+    serializer_class = TrailConditionSerializer
     permission_classes = [IsAdminUserOrReadOnly]
