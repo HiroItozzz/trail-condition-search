@@ -300,9 +300,9 @@ class DeepseekClient(ConversationalAi):
             len(generated_text),
             self.model,
         )
-        
-        logger.debug("トータルトークン（from TokenStats）：", stats.total_tokens)
-        logger.debug("トータルトークンカウント：", response.usage.total_tokens)
+
+        logger.debug(f"トータルトークン（from TokenStats）： {stats.total_tokens}")
+        logger.debug(f"トータルトークンカウント： {response.usage.total_tokens}")
 
         return validated_data, stats
 
@@ -366,8 +366,8 @@ class GeminiClient(ConversationalAi):
             self.model,
         )
 
-        logger.debug("トータルトークン（from TokenStats）：", stats.total_tokens)
-        logger.debug("トータルトークンカウント：", response.usage_metadata.total_token_count)
+        logger.debug(f"トータルトークン（from TokenStats）： {stats.total_tokens}")
+        logger.debug(f"トータルトークンカウント： {response.usage_metadata.total_token_count}")
 
         return validated_data, stats
 
