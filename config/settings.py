@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",  # セッションフレームワーク
     "django.contrib.messages",  # メッセージフレームワーク
     "django.contrib.staticfiles",  # 静的ファイルの管理フレームワーク
+    "rest_framework",  # Django REST Framework
     "trail_status",
 ]
 
@@ -173,4 +174,25 @@ LOGGING = {
             "propagate": False,
         },
     },
+}
+
+# Django REST Framework configuration
+REST_FRAMEWORK = {
+    # ページネーション設定
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,  # 1ページあたり20件
+    # デフォルトの認証（今は不要だが将来のため）
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    # デフォルトの権限（誰でも読み取り可能）
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    # レンダラー（JSON + ブラウザブルAPI）
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",  # 開発用UI
+    ],
+    # 日時フォーマット
+    "DATETIME_FORMAT": "%Y-%m-%d %H:%M:%S",
+    "DATE_FORMAT": "%Y-%m-%d",
 }
