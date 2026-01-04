@@ -31,7 +31,7 @@ SECRET_KEY = "django-insecure-b^^&7&(v)4=pcrntfyx+933&avmr4+)s7uulnjdo#78nixmhcs
 DEBUG = True
 
 # 許可するホスト
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [".localhost", "127.0.0.1", "[::1]"]
 
 
 # Application definition
@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",  # 静的ファイルの管理フレームワーク
     "rest_framework",  # Django REST Framework
     "trail_status",
+    "api",
 ]
 
 # ミドルウェア
