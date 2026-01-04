@@ -26,6 +26,11 @@ class TokenStats:
         self._output_fee = None
 
     @property
+    def total_tokens(self):
+        total = self.input_tokens + self.thoughts_tokens + self.pure_output_tokens
+        return total
+
+    @property
     def input_fee(self) -> float:
         if self._input_fee is None:
             self._input_fee = LlmFee(self.model_name).calculate(self.input_tokens, "input")

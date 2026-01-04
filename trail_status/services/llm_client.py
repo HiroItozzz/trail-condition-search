@@ -8,7 +8,6 @@ from pathlib import Path
 
 import yaml
 from django.conf import settings
-from openai import AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError, computed_field
 
 from .llm_stats import TokenStats
@@ -186,8 +185,8 @@ class ConversationalAi(ABC):
             logger.warning(f"{self.model}の計算資源が逼迫しているようです。{5 * (i + 1)}秒後にリトライします。")
             await asyncio.sleep(3 ** (i + 1))
         else:
-            logger.warning(f"{self.model}は現在過負荷のようです。少し時間をおいて再実行する必要があります。")
-            logger.warning("実行を中止します。")
+            logger.error(f"{self.model}は現在過負荷のようです。少し時間をおいて再実行する必要があります。")
+            logger.error("実行を中止します。")
             raise
 
     async def validation_error(self, i, max_retries, response_text):
@@ -195,21 +194,21 @@ class ConversationalAi(ABC):
             logger.warning(f"{self.model}が構造化出力に失敗。{5 * (i + 1)}秒後にリトライします。")
             await asyncio.sleep(5 * (i + 1))
         else:
-            logger.warning(f"{self.model}が{max_retries}回構造化出力に失敗。LLMの設定を見直してください。")
+            logger.error(f"{self.model}が{max_retries}回構造化出力に失敗。LLMの設定を見直してください。")
             self.save_invalid_data(response_text)
-            logger.warning("実行を中止します。")
+            logger.error("実行を中止します。")
             raise
 
     def handle_client_error(self, e: Exception):
         logger.error("エラー：APIレート制限。")
         logger.error("詳細はapp.logを確認してください。実行を中止します。")
-        logger.info(f"詳細: {e}")
+        logger.error(f"詳細: {e}")
         raise
 
     def handle_unexpected_error(self, e: Exception):
         logger.error("要約取得中に予期せぬエラー発生。詳細はapp.logを確認してください。")
         logger.error("実行を中止します。")
-        logger.info(f"詳細: {e}")
+        logger.error(f"詳細: {e}")
         raise
 
     def validate_response(self, response_text):
@@ -219,7 +218,7 @@ class ConversationalAi(ABC):
 
         try:
             validated_data = TrailConditionSchemaList.model_validate_json(response_text)
-            logger.warning(f"{self.model}が構造化出力に成功")
+            logger.info(f"{self.model}が構造化出力に成功")
         except ValidationError as e:
             raise e
         return validated_data
@@ -245,6 +244,8 @@ class DeepseekClient(ConversationalAi):
         return STATEMENT + self.prompt + self.data
 
     async def generate(self) -> tuple[TrailConditionSchemaList, TokenStats]:
+        from openai import AsyncOpenAI
+
         logger.warning("Deepseekからの応答を待っています。")
         logger.debug(f"APIリクエスト中。APIキー: ...{self.api_key[-5:]}")
 
@@ -299,6 +300,9 @@ class DeepseekClient(ConversationalAi):
             len(generated_text),
             self.model,
         )
+        
+        logger.debug("トータルトークン（from TokenStats）：", stats.total_tokens)
+        logger.debug("トータルトークンカウント：", response.usage.total_tokens)
 
         return validated_data, stats
 
@@ -343,6 +347,16 @@ class GeminiClient(ConversationalAi):
             except Exception as e:
                 super().handle_unexpected_error(e)
 
+        for part in response.candidates[0].content.parts:
+            if not part.text:
+                continue
+            elif part.thought:
+                logger.debug("## **Thoughts summary:**")
+                logger.debug(part.text)
+            else:
+                logger.debug("## **Answer:**")
+                logger.debug(part.text)
+
         stats = TokenStats(
             response.usage_metadata.prompt_token_count,
             getattr(response.usage_metadata, "thoughts_token_count", 0) or 0,  # Noneが返ってきた場合のフォールバック
@@ -351,6 +365,9 @@ class GeminiClient(ConversationalAi):
             len(response.text),
             self.model,
         )
+
+        logger.debug("トータルトークン（from TokenStats）：", stats.total_tokens)
+        logger.debug("トータルトークンカウント：", response.usage_metadata.total_token_count)
 
         return validated_data, stats
 
